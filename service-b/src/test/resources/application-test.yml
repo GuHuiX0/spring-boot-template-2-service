@@ -1,0 +1,11 @@
+spring:
+  datasource:
+    url: jdbc:sqlite:target/service-b-test.db
+    driver-class-name: org.sqlite.JDBC
+  flyway:
+    enabled: true
+  jpa:
+    database-platform: org.hibernate.community.dialect.SQLiteDialect
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false

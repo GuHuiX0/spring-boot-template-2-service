@@ -1,0 +1,13 @@
+server:
+  port: 8081
+spring:
+  datasource:
+    url: ${PRODUCT_DB_URL:jdbc:sqlite:./data/products.db}
+    driver-class-name: org.sqlite.JDBC
+  flyway:
+    enabled: true
+  jpa:
+    database-platform: org.hibernate.community.dialect.SQLiteDialect
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
