@@ -1,0 +1,12 @@
+server:
+  port: 8080
+service-b:
+  base-url: ${SERVICE_B_URL:http://localhost:8081}
+spring:
+  cloud:
+    openfeign:
+      client:
+        config:
+          service-b:
+            connect-timeout: 2000
+            read-timeout: 5000
