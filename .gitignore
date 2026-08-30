@@ -1,0 +1,13 @@
+.worktrees/
+.superpowers/
+target/
+**/target/
+data/
+**/*.db
+**/*.db-shm
+**/*.db-wal
+*.log
+.idea/
+.vscode/
+*.iml
+.DS_Store
