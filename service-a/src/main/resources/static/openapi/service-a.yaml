@@ -185,6 +185,7 @@ components:
           type: string
           minLength: 1
           maxLength: 120
+          pattern: '\S'
           example: Wireless keyboard
         description:
           type: string
@@ -195,6 +196,7 @@ components:
           type: number
           format: double
           minimum: 0
+          maximum: 99999999999999999.99
           multipleOf: 0.01
           example: 49.90
         stockQuantity:
@@ -214,6 +216,7 @@ components:
           type: string
           minLength: 1
           maxLength: 120
+          pattern: '\S'
           example: Wireless keyboard
         description:
           type: string
@@ -224,6 +227,7 @@ components:
           type: number
           format: double
           minimum: 0
+          maximum: 99999999999999999.99
           multipleOf: 0.01
           example: 49.90
         stockQuantity:

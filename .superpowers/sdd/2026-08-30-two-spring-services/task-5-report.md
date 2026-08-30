@@ -70,3 +70,99 @@ Read the committed controllers, product request/response DTOs, exception handler
 ## Remaining limitation
 
 The Java runtime and Maven executable are absent, so the checked-in Java contract tests could not be compiled or run here. The static validation above is the available verification evidence; run the recorded Maven command in a Java 21/Maven environment for runtime test execution.
+
+## Fix round 1: complete documented Product constraints
+
+Addressed the Important review finding without changing the deferred Java contract-test-depth observation.
+
+- Added the OpenAPI-compatible `pattern: '\S'` constraint to the `name` property in both `ProductRequest` and `ProductResponse` schemas of both manifests. The single-quoted YAML scalar preserves one backslash, so the pattern requires at least one non-whitespace character.
+- Added `maximum: 99999999999999999.99` to the `price` property in both request and response schemas of both manifests. Existing `minimum: 0` and `multipleOf: 0.01` remain unchanged.
+- Retained every existing name and price example; the static check confirms each is non-whitespace, within the documented range, and price-compatible with 0.01 increments.
+- Did not change `OpenApiContractTest`; the deferred Minor observation concerned expanding that test's depth and was explicitly out of scope for this round.
+
+### Focused RED check
+
+Before editing the manifests, the following focused Python check was run:
+
+```powershell
+@'
+from pathlib import Path
+import yaml
+for path in ('service-a/src/main/resources/static/openapi/service-a.yaml', 'service-b/src/main/resources/static/openapi/service-b.yaml'):
+    schemas = yaml.safe_load(Path(path).read_text())['components']['schemas']
+    for schema_name in ('ProductRequest', 'ProductResponse'):
+        name = schemas[schema_name]['properties']['name']
+        price = schemas[schema_name]['properties']['price']
+        assert name['pattern'] == r'\S'
+        assert str(price['maximum']) == '99999999999999999.99'
+print('Focused constraint check: PASS')
+'@ | python -
+```
+
+Output (expected failure before the fields existed):
+
+```text
+Traceback (most recent call last):
+  File "<stdin>", line 8, in <module>
+KeyError: 'pattern'
+```
+
+### Exact final static command and output
+
+```powershell
+@'
+import re
+from decimal import Decimal
+from pathlib import Path
+import yaml
+
+EXPECTED_MAXIMUM = '99999999999999999.99'
+EXPECTED_PATTERN = r'\S'
+
+def scalar(node, *keys):
+    for key in keys:
+        node = {entry[0].value: entry[1] for entry in node.value}[key]
+    return node.value
+
+for service, package in (('service-a', 'servicea'), ('service-b', 'serviceb')):
+    manifest = Path(service) / 'src/main/resources/static/openapi' / f'{service}.yaml'
+    source = manifest.read_text()
+    document = yaml.safe_load(source)
+    tree = yaml.compose(source)
+    request_java = Path(service) / f'src/main/java/com/example/product/{package}/product/ProductRequest.java'
+    java = request_java.read_text()
+    assert '@NotBlank' in java and '@Digits(integer = 17, fraction = 2)' in java
+    for schema_name in ('ProductRequest', 'ProductResponse'):
+        name = document['components']['schemas'][schema_name]['properties']['name']
+        price = document['components']['schemas'][schema_name]['properties']['price']
+        assert name['minLength'] == 1 and name['maxLength'] == 120 and name['pattern'] == EXPECTED_PATTERN
+        assert re.search(name['pattern'], name['example']) and re.search(name['pattern'], '   ') is None
+        assert price['minimum'] == 0 and price['multipleOf'] == 0.01
+        maximum = scalar(tree, 'components', 'schemas', schema_name, 'properties', 'price', 'maximum')
+        assert maximum == EXPECTED_MAXIMUM and Decimal(maximum) == Decimal(EXPECTED_MAXIMUM)
+        example = Decimal(str(price['example']))
+        assert Decimal('0') <= example <= Decimal(maximum) and example % Decimal('0.01') == 0
+    for path_item in document['paths'].values():
+        for operation in (path_item.get('post'), path_item.get('put')):
+            if operation:
+                example = operation['requestBody']['content']['application/json']['example']
+                assert re.search(EXPECTED_PATTERN, example['name'])
+                assert Decimal('0') <= Decimal(str(example['price'])) <= Decimal(EXPECTED_MAXIMUM)
+print('Round 1 OpenAPI constraint/schema/example/Java alignment: PASS')
+'@ | python -
+git diff --check
+```
+
+Output:
+
+```text
+Round 1 OpenAPI constraint/schema/example/Java alignment: PASS
+warning: in the working copy of 'service-a/src/main/resources/static/openapi/service-a.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'service-b/src/main/resources/static/openapi/service-b.yaml', LF will be replaced by CRLF the next time Git touches it
+```
+
+`git diff --check` completed successfully; the displayed warnings are non-failing CRLF conversion notices.
+
+### Maven limitation
+
+Maven and Java remain unavailable in this environment (`mvn` and `java` are not recognized PowerShell commands). No toolchain was downloaded and no application was launched, so this fix round has static verification only.
