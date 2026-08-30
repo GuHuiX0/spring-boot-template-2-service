@@ -2,12 +2,10 @@ package com.example.product.serviceb;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 
-@SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:sqlite:target/context-test.db",
-        "spring.jpa.hibernate.ddl-auto=none",
-        "spring.flyway.enabled=false"
-})
+@SpringBootTest
+@ActiveProfiles("test")
 class ServiceBApplicationTest {
 
     @Test

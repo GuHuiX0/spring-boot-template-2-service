@@ -60,3 +60,34 @@ They could not be executed: environment checks reported `JAVA_COMMAND=False`, `J
 ## Concerns
 
 Runtime compilation and execution remain unverified because Java, `javac`, and Maven are absent. A Java 21/Maven-enabled environment should run the two focused tests and the Service B module test suite before deployment.
+
+## Fix Round 1/5: Context-Test Flyway and Validation Configuration
+
+### Files Changed
+
+- `service-b/src/test/java/com/example/product/serviceb/ServiceBApplicationTest.java`
+- `.superpowers/sdd/2026-08-30-two-spring-services/task-2-report.md`
+
+### Covering Test
+
+`ServiceBApplicationTest.contextLoads` now uses `@ActiveProfiles("test")`, which loads the isolated SQLite settings from `application-test.yml`. That profile enables Flyway and configures Hibernate with `ddl-auto: validate`; the test no longer supplies local overrides that disable either setting.
+
+### Command/Check and Exact Result
+
+The pre-fix static reproduction checked for the two contradictory local properties and returned exactly:
+
+```text
+STATIC_RED_REPRODUCED: context test disables Flyway and Hibernate validation
+```
+
+The post-fix static source/profile assertion verifies that the context test declares `@ActiveProfiles("test")`, has no `@SpringBootTest(properties=...)` override, and that `application-test.yml` sets `jdbc:sqlite:target/service-b-test.db`, `spring.flyway.enabled: true`, and `spring.jpa.hibernate.ddl-auto: validate`. It returned exactly:
+
+```text
+STATIC_GREEN: ServiceBApplicationTest uses test profile with Flyway enabled and ddl-auto validate
+```
+
+`git diff --check` also returned successfully with no whitespace errors.
+
+### Runtime Limitation
+
+The focused command `mvn -pl service-b -Dtest=ServiceBApplicationTest test` was not run because both `java` and `mvn` are absent in the assigned environment. No toolchain was downloaded and no application was launched.
