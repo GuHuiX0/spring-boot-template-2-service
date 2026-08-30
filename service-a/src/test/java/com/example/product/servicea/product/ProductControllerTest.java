@@ -1,5 +1,9 @@
 package com.example.product.servicea.product;
 
+import feign.FeignException;
+import feign.Request;
+import feign.Response;
+import feign.RetryableException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -7,9 +11,12 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
@@ -177,5 +184,92 @@ class ProductControllerTest {
                 .andExpect(jsonPath("$.fieldErrors.stockQuantity").exists());
 
         verifyNoInteractions(productClient);
+    }
+
+    @Test
+    void rendersAnUpstream400ThroughTheControllerAdvice() throws Exception {
+        when(productClient.findById(7L)).thenThrow(feignException(400, "{\"message\":\"Name must be unique\"}"));
+
+        mockMvc.perform(get("/api/products/7"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.message").value("Name must be unique"))
+                .andExpect(jsonPath("$.path").value("/api/products/7"))
+                .andExpect(jsonPath("$.fieldErrors").isMap())
+                .andExpect(jsonPath("$.fieldErrors").isEmpty())
+                .andExpect(jsonPath("$.trace").doesNotExist())
+                .andExpect(jsonPath("$.exception").doesNotExist());
+
+        verify(productClient).findById(7L);
+    }
+
+    @Test
+    void rendersAnUpstream404ThroughTheControllerAdvice() throws Exception {
+        when(productClient.findById(7L)).thenThrow(feignException(404, "{\"message\":\"Product 7 was not found\"}"));
+
+        mockMvc.perform(get("/api/products/7"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.error").value("Not Found"))
+                .andExpect(jsonPath("$.message").value("Product 7 was not found"))
+                .andExpect(jsonPath("$.path").value("/api/products/7"))
+                .andExpect(jsonPath("$.fieldErrors").isMap())
+                .andExpect(jsonPath("$.fieldErrors").isEmpty())
+                .andExpect(jsonPath("$.trace").doesNotExist())
+                .andExpect(jsonPath("$.exception").doesNotExist());
+
+        verify(productClient).findById(7L);
+    }
+
+    @Test
+    void rendersRetryableUpstreamFailuresThroughTheControllerAdvice() throws Exception {
+        when(productClient.findById(7L)).thenThrow(new RetryableException(
+                -1,
+                "Connection refused at http://service-b:8081",
+                Request.HttpMethod.GET,
+                new IOException("Connection refused"),
+                (Long) null,
+                upstreamRequest()
+        ));
+
+        mockMvc.perform(get("/api/products/7"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.status").value(502))
+                .andExpect(jsonPath("$.error").value("Bad Gateway"))
+                .andExpect(jsonPath("$.message").value("Service B is unavailable"))
+                .andExpect(jsonPath("$.path").value("/api/products/7"))
+                .andExpect(jsonPath("$.fieldErrors").isMap())
+                .andExpect(jsonPath("$.fieldErrors").isEmpty())
+                .andExpect(jsonPath("$.trace").doesNotExist())
+                .andExpect(jsonPath("$.exception").doesNotExist());
+
+        verify(productClient).findById(7L);
+    }
+
+    private FeignException feignException(int status, String body) {
+        Response.Builder response = Response.builder()
+                .status(status)
+                .reason("upstream")
+                .request(upstreamRequest())
+                .headers(Map.of("Content-Type", List.of("application/json")));
+        if (body != null) {
+            response.body(body, StandardCharsets.UTF_8);
+        }
+        return FeignException.errorStatus("ProductClient#findById(long)", response.build());
+    }
+
+    private Request upstreamRequest() {
+        return Request.create(
+                Request.HttpMethod.GET,
+                "http://service-b:8081/internal/products/7",
+                Map.of(),
+                null,
+                StandardCharsets.UTF_8,
+                null
+        );
     }
 }

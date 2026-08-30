@@ -55,3 +55,58 @@ Performed without a Java runtime or Maven:
 ## Self-review
 
 Reviewed the staged surface against the task brief. No persistence was added to Service A; Service B was not modified; no apps, toolchains, scripts, or subagents were used. The remaining limitation is runtime verification: compilation and tests require a Java/Maven environment that is absent by task constraint.
+
+## Fix round 1
+
+Addressed review findings without changing production code:
+
+- `GlobalExceptionHandlerTest` now passes `(Long) null` to the Feign 13.6.1 `RetryableException` constructor, removing the `Long`/`Date` overload ambiguity.
+- `ProductControllerTest` now makes the mocked `ProductClient` throw realistic Feign 400, Feign 404, and retryable connection exceptions. The MockMvc assertions exercise `@RestControllerAdvice` resolution and verify HTTP status, timestamp, public path, safe message, empty `fieldErrors`, and absence of `trace`/`exception` fields.
+- `GlobalExceptionHandlerTest` now verifies blank textual and 1001-character top-level upstream messages fall back safely for both the 400 and 404 branches.
+
+Covering test files:
+
+- `service-a/src/test/java/com/example/product/servicea/product/ProductControllerTest.java`
+- `service-a/src/test/java/com/example/product/servicea/error/GlobalExceptionHandlerTest.java`
+
+The planned focused Maven command remains unavailable because Java and Maven are absent:
+
+```text
+mvn -pl service-a -Dtest=ProductControllerTest,GlobalExceptionHandlerTest test
+```
+
+Exact static coverage command and output:
+
+```text
+git diff --check; rg -n '\(Long\) null' service-a/src/test/java/com/example/product/servicea/error/GlobalExceptionHandlerTest.java service-a/src/test/java/com/example/product/servicea/product/ProductControllerTest.java; rg -n '@WebMvcTest|rendersAnUpstream400|rendersAnUpstream404|rendersRetryable|thenThrow\(' service-a/src/test/java/com/example/product/servicea/product/ProductControllerTest.java; rg -n 'blankMessage|overlongMessage|repeat\(1001\)' service-a/src/test/java/com/example/product/servicea/error/GlobalExceptionHandlerTest.java; $productionChanges = git diff --name-only HEAD -- service-a/src/main; if ($productionChanges) { $productionChanges } else { 'PRODUCTION_CHANGES=none' }; $java = Get-Command java -ErrorAction SilentlyContinue; $mvn = Get-Command mvn -ErrorAction SilentlyContinue; if ($java) { "JAVA=$($java.Source)" } else { 'JAVA=absent' }; if ($mvn) { "MAVEN=$($mvn.Source)" } else { 'MAVEN=absent' }
+
+service-a/src/test/java/com/example/product/servicea/error/GlobalExceptionHandlerTest.java:78:                (Long) null,
+service-a/src/test/java/com/example/product/servicea/product/ProductControllerTest.java:234:                (Long) null,
+34:@WebMvcTest(ProductController.class)
+190:    void rendersAnUpstream400ThroughTheControllerAdvice() throws Exception {
+191:        when(productClient.findById(7L)).thenThrow(feignException(400, "{\"message\":\"Name must be unique\"}"));
+209:    void rendersAnUpstream404ThroughTheControllerAdvice() throws Exception {
+210:        when(productClient.findById(7L)).thenThrow(feignException(404, "{\"message\":\"Product 7 was not found\"}"));
+228:    void rendersRetryableUpstreamFailuresThroughTheControllerAdvice() throws Exception {
+229:        when(productClient.findById(7L)).thenThrow(new RetryableException(
+42:        ApiError blankMessage = bodyOf(handler.handleFeignException(feignException(400, "{\"message\":\"   \"}"), request()));
+43:        ApiError overlongMessage = bodyOf(handler.handleFeignException(feignException(400, "{\"message\":\"%s\"}".formatted("x".repeat(1001))), request()));
+47:        assertSafeError(blankMessage, 400, "Bad Request", "Service B rejected the request");
+48:        assertSafeError(overlongMessage, 400, "Bad Request", "Service B rejected the request");
+55:        ApiError blankMessage = bodyOf(handler.handleFeignException(feignException(404, "{\"message\":\"   \"}"), request()));
+56:        ApiError overlongMessage = bodyOf(handler.handleFeignException(feignException(404, "{\"message\":\"%s\"}".formatted("x".repeat(1001))), request()));
+60:        assertSafeError(blankMessage, 404, "Not Found", "Product was not found");
+61:        assertSafeError(overlongMessage, 404, "Not Found", "Product was not found");
+PRODUCTION_CHANGES=none
+JAVA=absent
+MAVEN=absent
+```
+
+Static Feign 13.6.1 bytecode inspection also confirmed the two conflicting six-argument retry constructors and that the added `Long` cast selects the intended overload:
+
+```text
+d(ILjava/lang/String;Lfeign/Request$HttpMethod;Ljava/lang/Throwable;Ljava/lang/Long;Lfeign/Request;)V
+d(ILjava/lang/String;Lfeign/Request$HttpMethod;Ljava/lang/Throwable;Ljava/util/Date;Lfeign/Request;)V
+```
+
+Self-review: the tests assert externally observable HTTP behavior rather than mock calls, except for the existing delegation checks where client invocation is itself the facade contract. No production files changed in this round. The deferred `status == -1` test was not added.

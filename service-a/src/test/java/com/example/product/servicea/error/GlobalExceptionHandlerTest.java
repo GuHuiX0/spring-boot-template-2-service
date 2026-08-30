@@ -39,18 +39,26 @@ class GlobalExceptionHandlerTest {
     void usesThe400FallbackWhenTheUpstreamBodyIsAbsentOrMalformed() {
         ApiError absent = bodyOf(handler.handleFeignException(feignException(400, null), request()));
         ApiError malformed = bodyOf(handler.handleFeignException(feignException(400, "not-json"), request()));
+        ApiError blankMessage = bodyOf(handler.handleFeignException(feignException(400, "{\"message\":\"   \"}"), request()));
+        ApiError overlongMessage = bodyOf(handler.handleFeignException(feignException(400, "{\"message\":\"%s\"}".formatted("x".repeat(1001))), request()));
 
         assertSafeError(absent, 400, "Bad Request", "Service B rejected the request");
         assertSafeError(malformed, 400, "Bad Request", "Service B rejected the request");
+        assertSafeError(blankMessage, 400, "Bad Request", "Service B rejected the request");
+        assertSafeError(overlongMessage, 400, "Bad Request", "Service B rejected the request");
     }
 
     @Test
     void usesThe404FallbackWhenTheUpstreamBodyIsAbsentOrMalformed() {
         ApiError absent = bodyOf(handler.handleFeignException(feignException(404, null), request()));
         ApiError malformed = bodyOf(handler.handleFeignException(feignException(404, "{\"message\":false}"), request()));
+        ApiError blankMessage = bodyOf(handler.handleFeignException(feignException(404, "{\"message\":\"   \"}"), request()));
+        ApiError overlongMessage = bodyOf(handler.handleFeignException(feignException(404, "{\"message\":\"%s\"}".formatted("x".repeat(1001))), request()));
 
         assertSafeError(absent, 404, "Not Found", "Product was not found");
         assertSafeError(malformed, 404, "Not Found", "Product was not found");
+        assertSafeError(blankMessage, 404, "Not Found", "Product was not found");
+        assertSafeError(overlongMessage, 404, "Not Found", "Product was not found");
     }
 
     @Test
@@ -67,7 +75,7 @@ class GlobalExceptionHandlerTest {
                 "Connection refused at http://service-b:8081",
                 Request.HttpMethod.GET,
                 new IOException("Connection refused"),
-                null,
+                (Long) null,
                 upstreamRequest()
         );
 
