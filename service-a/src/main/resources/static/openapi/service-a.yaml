@@ -1,0 +1,259 @@
+openapi: 3.0.3
+info:
+  title: Product Service A API
+  version: 1.0.0
+  description: Public product API backed by the internal Product Service B.
+servers:
+  - url: /
+tags:
+  - name: Products
+paths:
+  /api/products:
+    get:
+      tags: [Products]
+      operationId: listProducts
+      summary: List products
+      responses:
+        '200':
+          description: Products ordered by ID.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProductResponse'
+              example:
+                - id: 1
+                  name: Wireless keyboard
+                  description: Compact mechanical keyboard
+                  price: 49.90
+                  stockQuantity: 25
+                  createdAt: '2026-08-30T08:15:30Z'
+                  updatedAt: '2026-08-30T08:15:30Z'
+        '502':
+          $ref: '#/components/responses/UpstreamUnavailable'
+    post:
+      tags: [Products]
+      operationId: createProduct
+      summary: Create a product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductRequest'
+            example:
+              name: Wireless keyboard
+              description: Compact mechanical keyboard
+              price: 49.90
+              stockQuantity: 25
+      responses:
+        '201':
+          description: Product created.
+          headers:
+            Location:
+              description: Path of the created product.
+              schema:
+                type: string
+              example: /api/products/1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '502':
+          $ref: '#/components/responses/UpstreamUnavailable'
+  /api/products/{id}:
+    get:
+      tags: [Products]
+      operationId: getProduct
+      summary: Get a product by ID
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: Product found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          $ref: '#/components/responses/UpstreamUnavailable'
+    put:
+      tags: [Products]
+      operationId: updateProduct
+      summary: Update a product by ID
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductRequest'
+            example:
+              name: Wireless keyboard
+              description: Compact mechanical keyboard, revised
+              price: 54.90
+              stockQuantity: 30
+      responses:
+        '200':
+          description: Product updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          $ref: '#/components/responses/UpstreamUnavailable'
+    delete:
+      tags: [Products]
+      operationId: deleteProduct
+      summary: Delete a product by ID
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '204':
+          description: Product deleted.
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          $ref: '#/components/responses/UpstreamUnavailable'
+components:
+  parameters:
+    ProductId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+      example: 1
+  responses:
+    BadRequest:
+      description: The request is invalid or was rejected by the upstream service.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            timestamp: '2026-08-30T08:15:30Z'
+            status: 400
+            error: Bad Request
+            message: Validation failed
+            path: /api/products
+            fieldErrors:
+              name: must not be blank
+    NotFound:
+      description: No product exists for the requested ID.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            timestamp: '2026-08-30T08:15:30Z'
+            status: 404
+            error: Not Found
+            message: Product was not found
+            path: /api/products/1
+            fieldErrors: {}
+    UpstreamUnavailable:
+      description: The internal product service is unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            timestamp: '2026-08-30T08:15:30Z'
+            status: 502
+            error: Bad Gateway
+            message: Service B is unavailable
+            path: /api/products
+            fieldErrors: {}
+  schemas:
+    ProductRequest:
+      type: object
+      required: [name, price, stockQuantity]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+          example: Wireless keyboard
+        description:
+          type: string
+          nullable: true
+          maxLength: 1000
+          example: Compact mechanical keyboard
+        price:
+          type: number
+          format: double
+          minimum: 0
+          multipleOf: 0.01
+          example: 49.90
+        stockQuantity:
+          type: integer
+          minimum: 0
+          example: 25
+    ProductResponse:
+      type: object
+      required: [id, name, price, stockQuantity, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 1
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+          example: Wireless keyboard
+        description:
+          type: string
+          nullable: true
+          maxLength: 1000
+          example: Compact mechanical keyboard
+        price:
+          type: number
+          format: double
+          minimum: 0
+          multipleOf: 0.01
+          example: 49.90
+        stockQuantity:
+          type: integer
+          minimum: 0
+          example: 25
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-08-30T08:15:30Z'
+        updatedAt:
+          type: string
+          format: date-time
+          example: '2026-08-30T08:15:30Z'
+    ApiError:
+      type: object
+      required: [timestamp, status, error, message, path, fieldErrors]
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: integer
+        error:
+          type: string
+        message:
+          type: string
+        path:
+          type: string
+        fieldErrors:
+          type: object
+          additionalProperties:
+            type: string

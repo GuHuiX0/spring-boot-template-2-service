@@ -11,3 +11,9 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    url: /openapi/service-b.yaml
+  api-docs:
+    enabled: false

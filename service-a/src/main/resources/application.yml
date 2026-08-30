@@ -10,3 +10,9 @@ spring:
           service-b:
             connect-timeout: 2000
             read-timeout: 5000
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    url: /openapi/service-a.yaml
+  api-docs:
+    enabled: false
