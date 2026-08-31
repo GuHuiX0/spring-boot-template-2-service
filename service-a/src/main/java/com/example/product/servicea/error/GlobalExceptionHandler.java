@@ -10,6 +10,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 
 import java.nio.ByteBuffer;
 import java.time.Instant;
@@ -38,6 +40,21 @@ public class GlobalExceptionHandler {
         );
         return ResponseEntity.badRequest()
                 .body(apiError(HttpStatus.BAD_REQUEST, "Validation failed", request.getRequestURI(), fieldErrors));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiError> handleMalformedJson(HttpMessageNotReadableException exception, HttpServletRequest request) {
+        return ResponseEntity.badRequest()
+                .body(apiError(HttpStatus.BAD_REQUEST, "Malformed JSON request", request.getRequestURI(), Map.of()));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiError> handleTypeMismatch(
+            MethodArgumentTypeMismatchException exception,
+            HttpServletRequest request
+    ) {
+        return ResponseEntity.badRequest()
+                .body(apiError(HttpStatus.BAD_REQUEST, "Invalid request parameter", request.getRequestURI(), Map.of()));
     }
 
     @ExceptionHandler(FeignException.class)

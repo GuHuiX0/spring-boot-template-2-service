@@ -40,13 +40,13 @@ class ProductRepositoryTest {
 
         ProductEntity reloaded = productRepository.findById(saved.getId()).orElseThrow();
 
-        assertThat(reloaded.getId()).isPositive();
+        assertThat(reloaded.getId()).isInstanceOf(Integer.class).isPositive();
         assertThat(reloaded.getName()).isEqualTo("Keyboard");
         assertThat(reloaded.getDescription()).isEqualTo("Mechanical keyboard");
         assertThat(reloaded.getPrice()).isEqualByComparingTo("49.90");
         assertThat(reloaded.getStockQuantity()).isEqualTo(8);
-        assertThat(reloaded.getCreatedAt()).isNotNull();
-        assertThat(reloaded.getUpdatedAt()).isNotNull();
+        assertThat(reloaded.getCreatedAt()).isEqualTo(saved.getCreatedAt());
+        assertThat(reloaded.getUpdatedAt()).isEqualTo(saved.getUpdatedAt());
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1",
                 Integer.class

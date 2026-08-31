@@ -2,7 +2,8 @@
 .superpowers/
 target/
 **/target/
-data/
+data/*
+!data/.gitkeep
 **/*.db
 **/*.db-shm
 **/*.db-wal

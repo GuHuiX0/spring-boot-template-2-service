@@ -50,7 +50,10 @@ point.
 
 Service B owns the SQLite database. Override its location before starting
 Service B with `PRODUCT_DB_URL`; its default is
-`jdbc:sqlite:./data/products.db`.
+`jdbc:sqlite:./data/products.db`. The tracked `data/` directory supports this
+documented repository-root launch. If you start Service B from another working
+directory, create that directory's database parent first or override
+`PRODUCT_DB_URL`.
 
 Service A targets Service B through `SERVICE_B_URL`; its default is
 `http://localhost:8081`. Set it before starting Service A when Service B uses
@@ -87,18 +90,19 @@ update, list, delete, and deleted-resource checks, use the smoke client below.
 starts or stops Java processes and never resets the database.
 
 ```sh
-python scripts/smoke_test.py
+python scripts/smoke_test.py --timeout 10.0
 ```
 
 Use alternate service locations when needed:
 
 ```sh
-python scripts/smoke_test.py --service-a-url http://localhost:9080 --service-b-url http://localhost:9081
+python scripts/smoke_test.py --service-a-url http://localhost:9080 --service-b-url http://localhost:9081 --timeout 15.0
 ```
 
 The client first verifies both packaged OpenAPI manifests, then calls Service
 A for the entire CRUD flow. It prints its success message only after deletion
-and the final expected `404` check succeed.
+and the final expected `404` check succeed. `--timeout` is a positive finite
+per-request timeout in seconds and defaults to `10.0`.
 
 ## Reset the local database
 

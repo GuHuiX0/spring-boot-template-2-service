@@ -6,6 +6,7 @@ resets a service or database.
 
 import argparse
 import json
+import math
 import sys
 from typing import Any, Optional, Sequence
 from urllib import error, request
@@ -57,7 +58,7 @@ def _parse_json(body: bytes, method: str, url: str, status: int) -> Any:
 
 
 def request_json(
-    method: str, url: str, body: Any = None, expected_status: int = 200
+    method: str, url: str, body: Any = None, expected_status: int = 200, timeout: float = 10.0
 ) -> Any:
     """Send a JSON request and require exactly ``expected_status``."""
     data = json.dumps(body).encode("utf-8") if body is not None else None
@@ -68,7 +69,7 @@ def request_json(
         method=method,
     )
     try:
-        with request.urlopen(http_request) as response:
+        with request.urlopen(http_request, timeout=timeout) as response:
             status = response.getcode()
             response_body = response.read()
     except error.HTTPError as exc:
@@ -85,11 +86,11 @@ def request_json(
     return _parse_json(response_body, method, url, status)
 
 
-def request_text(method: str, url: str, expected_status: int = 200) -> str:
+def request_text(method: str, url: str, expected_status: int = 200, timeout: float = 10.0) -> str:
     """Send a text request and require exactly ``expected_status``."""
     http_request = request.Request(url, method=method)
     try:
-        with request.urlopen(http_request) as response:
+        with request.urlopen(http_request, timeout=timeout) as response:
             status = response.getcode()
             response_body = response.read()
     except error.HTTPError as exc:
@@ -104,9 +105,9 @@ def request_text(method: str, url: str, expected_status: int = 200) -> str:
     return response_body.decode("utf-8", errors="replace")
 
 
-def expect_not_found(url: str) -> Any:
+def expect_not_found(url: str, timeout: float) -> Any:
     """Treat only a 404 response for a deleted product as success."""
-    return request_json("GET", url, expected_status=404)
+    return request_json("GET", url, expected_status=404, timeout=timeout)
 
 
 def _require(condition: bool, message: str) -> None:
@@ -124,21 +125,21 @@ def _require_product_id(product: Any) -> int:
     return product_id
 
 
-def _attempt_cleanup(service_a_url: str, product_id: int) -> None:
+def _attempt_cleanup(service_a_url: str, product_id: int, timeout: float) -> None:
     try:
-        request_json("DELETE", f"{service_a_url}/api/products/{product_id}", expected_status=204)
+        request_json("DELETE", f"{service_a_url}/api/products/{product_id}", expected_status=204, timeout=timeout)
     except Exception as cleanup_error:  # Preserve the original assertion or request failure.
         print(f"Cleanup deletion for product {product_id} failed: {cleanup_error}", file=sys.stderr)
 
 
-def run(service_a_url: str, service_b_url: str) -> None:
+def run(service_a_url: str, service_b_url: str, timeout: float = 10.0) -> None:
     """Run the manifest checks and public CRUD flow, cleaning up on later failure."""
     service_a_url = normalize_url(service_a_url)
     service_b_url = normalize_url(service_b_url)
 
-    manifest_a = request_text("GET", f"{service_a_url}/openapi/service-a.yaml")
+    manifest_a = request_text("GET", f"{service_a_url}/openapi/service-a.yaml", timeout=timeout)
     _require(manifest_a.strip(), "Service A OpenAPI manifest was empty")
-    manifest_b = request_text("GET", f"{service_b_url}/openapi/service-b.yaml")
+    manifest_b = request_text("GET", f"{service_b_url}/openapi/service-b.yaml", timeout=timeout)
     _require(manifest_b.strip(), "Service B OpenAPI manifest was empty")
 
     product_id = None
@@ -154,10 +155,11 @@ def run(service_a_url: str, service_b_url: str) -> None:
                 "stockQuantity": 5,
             },
             expected_status=201,
+            timeout=timeout,
         )
         product_id = _require_product_id(created)
 
-        retrieved = request_json("GET", f"{service_a_url}/api/products/{product_id}")
+        retrieved = request_json("GET", f"{service_a_url}/api/products/{product_id}", timeout=timeout)
         _require(
             isinstance(retrieved, dict) and retrieved.get("name") == "Smoke Test Product",
             "Retrieved product did not have the expected name",
@@ -172,13 +174,14 @@ def run(service_a_url: str, service_b_url: str) -> None:
                 "price": 24.50,
                 "stockQuantity": 7,
             },
+            timeout=timeout,
         )
         _require(
             isinstance(updated, dict) and updated.get("stockQuantity") == 7,
             "Updated product did not have stockQuantity 7",
         )
 
-        products = request_json("GET", f"{service_a_url}/api/products")
+        products = request_json("GET", f"{service_a_url}/api/products", timeout=timeout)
         _require(
             isinstance(products, list)
             and any(isinstance(product, dict) and product.get("id") == product_id for product in products),
@@ -189,13 +192,24 @@ def run(service_a_url: str, service_b_url: str) -> None:
             "DELETE",
             f"{service_a_url}/api/products/{product_id}",
             expected_status=204,
+            timeout=timeout,
         )
         deleted = True
-        expect_not_found(f"{service_a_url}/api/products/{product_id}")
+        expect_not_found(f"{service_a_url}/api/products/{product_id}", timeout)
     except Exception:
         if product_id is not None and not deleted:
-            _attempt_cleanup(service_a_url, product_id)
+            _attempt_cleanup(service_a_url, product_id, timeout)
         raise
+
+
+def positive_finite_timeout(value: str) -> float:
+    try:
+        timeout = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("timeout must be a positive finite number") from exc
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise argparse.ArgumentTypeError("timeout must be a positive finite number")
+    return timeout
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
@@ -204,13 +218,20 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument("--service-a-url", default="http://localhost:8080")
     parser.add_argument("--service-b-url", default="http://localhost:8081")
+    parser.add_argument(
+        "--timeout",
+        type=positive_finite_timeout,
+        default=10.0,
+        metavar="SECONDS",
+        help="positive finite per-request timeout in seconds (default: 10.0)",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
     try:
-        run(args.service_a_url, args.service_b_url)
+        run(args.service_a_url, args.service_b_url, args.timeout)
     except SmokeTestError as exc:
         print(f"Smoke test failed: {exc}", file=sys.stderr)
         return 1

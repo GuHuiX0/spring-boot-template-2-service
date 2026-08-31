@@ -53,8 +53,15 @@ public class ProductService {
     }
 
     private ProductEntity requireProduct(long id) {
-        return productRepository.findById(id)
+        return productRepository.findById(toRepositoryId(id))
                 .orElseThrow(() -> new ProductNotFoundException(id));
+    }
+
+    private Integer toRepositoryId(long id) {
+        if (id < 1 || id > Integer.MAX_VALUE) {
+            throw new ProductNotFoundException(id);
+        }
+        return (int) id;
     }
 
     private String normalizeDescription(String description) {
@@ -66,7 +73,7 @@ public class ProductService {
 
     private ProductResponse toResponse(ProductEntity product) {
         return new ProductResponse(
-                product.getId(),
+                product.getId().longValue(),
                 product.getName(),
                 product.getDescription(),
                 product.getPrice(),

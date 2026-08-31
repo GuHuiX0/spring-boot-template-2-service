@@ -124,6 +124,7 @@ components:
       schema:
         type: integer
         format: int64
+        minimum: 1
       example: 1
   responses:
     BadRequest:
@@ -182,7 +183,7 @@ components:
           example: 25
     ProductResponse:
       type: object
-      required: [id, name, price, stockQuantity, createdAt, updatedAt]
+      required: [id, name, description, price, stockQuantity, createdAt, updatedAt]
       properties:
         id:
           type: integer

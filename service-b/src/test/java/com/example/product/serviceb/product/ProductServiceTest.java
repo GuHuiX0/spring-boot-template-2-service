@@ -16,6 +16,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -42,7 +43,7 @@ class ProductServiceTest {
         when(productRepository.save(org.mockito.ArgumentMatchers.any(ProductEntity.class)))
                 .thenAnswer(invocation -> {
                     ProductEntity product = invocation.getArgument(0);
-                    product.setId(7L);
+                    product.setId(7);
                     return product;
                 });
         Instant beforeCreate = Instant.now();
@@ -59,15 +60,16 @@ class ProductServiceTest {
         assertThat(saved.getStockQuantity()).isEqualTo(8);
         assertThat(saved.getCreatedAt()).isBetween(beforeCreate, afterCreate);
         assertThat(saved.getUpdatedAt()).isBetween(beforeCreate, afterCreate);
-        assertThat(response.id()).isEqualTo(7L);
+        assertThat(saved.getId()).isInstanceOf(Integer.class).isPositive();
+        assertThat(response.id()).isInstanceOf(Long.class).isEqualTo(7L);
         assertThat(response.createdAt()).isEqualTo(saved.getCreatedAt());
         assertThat(response.updatedAt()).isEqualTo(saved.getUpdatedAt());
     }
 
     @Test
     void returnsProductsInAscendingRepositoryOrder() {
-        ProductEntity first = product(1L, "Keyboard", "Mechanical keyboard", "49.90", 8);
-        ProductEntity second = product(2L, "Mouse", null, "19.99", 4);
+        ProductEntity first = product(1, "Keyboard", "Mechanical keyboard", "49.90", 8);
+        ProductEntity second = product(2, "Mouse", null, "19.99", 4);
         when(productRepository.findAllByOrderByIdAsc()).thenReturn(List.of(first, second));
 
         List<ProductResponse> products = productService.findAll();
@@ -79,8 +81,8 @@ class ProductServiceTest {
 
     @Test
     void findsProductById() {
-        ProductEntity product = product(42L, "Keyboard", "Mechanical keyboard", "49.90", 8);
-        when(productRepository.findById(42L)).thenReturn(Optional.of(product));
+        ProductEntity product = product(42, "Keyboard", "Mechanical keyboard", "49.90", 8);
+        when(productRepository.findById(42)).thenReturn(Optional.of(product));
 
         ProductResponse response = productService.findById(42L);
 
@@ -89,13 +91,14 @@ class ProductServiceTest {
         assertThat(response.description()).isEqualTo("Mechanical keyboard");
         assertThat(response.price()).isEqualByComparingTo("49.90");
         assertThat(response.stockQuantity()).isEqualTo(8);
+        verify(productRepository).findById(42);
     }
 
     @Test
     void updatesProductWhilePreservingCreatedAtAndAdvancingUpdatedAt() {
-        ProductEntity existing = product(42L, "Keyboard", "Mechanical keyboard", "49.90", 8);
+        ProductEntity existing = product(42, "Keyboard", "Mechanical keyboard", "49.90", 8);
         Instant createdAt = existing.getCreatedAt();
-        when(productRepository.findById(42L)).thenReturn(Optional.of(existing));
+        when(productRepository.findById(42)).thenReturn(Optional.of(existing));
         when(productRepository.save(existing)).thenReturn(existing);
 
         ProductResponse response = productService.update(42L, new ProductRequest(
@@ -118,8 +121,8 @@ class ProductServiceTest {
 
     @Test
     void deletesExistingProduct() {
-        ProductEntity product = product(42L, "Keyboard", "Mechanical keyboard", "49.90", 8);
-        when(productRepository.findById(42L)).thenReturn(Optional.of(product));
+        ProductEntity product = product(42, "Keyboard", "Mechanical keyboard", "49.90", 8);
+        when(productRepository.findById(42)).thenReturn(Optional.of(product));
 
         productService.delete(42L);
 
@@ -128,7 +131,7 @@ class ProductServiceTest {
 
     @Test
     void throwsWhenRequestedProductDoesNotExist() {
-        when(productRepository.findById(42L)).thenReturn(Optional.empty());
+        when(productRepository.findById(42)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> productService.findById(42L))
                 .isInstanceOf(ProductNotFoundException.class)
@@ -137,7 +140,7 @@ class ProductServiceTest {
 
     @Test
     void throwsWhenUpdatedProductDoesNotExist() {
-        when(productRepository.findById(42L)).thenReturn(Optional.empty());
+        when(productRepository.findById(42)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> productService.update(42L, new ProductRequest(
                 "Keyboard", "Mechanical keyboard", new BigDecimal("49.90"), 8
@@ -148,14 +151,25 @@ class ProductServiceTest {
 
     @Test
     void throwsWhenDeletedProductDoesNotExist() {
-        when(productRepository.findById(42L)).thenReturn(Optional.empty());
+        when(productRepository.findById(42)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> productService.delete(42L))
                 .isInstanceOf(ProductNotFoundException.class)
                 .hasMessage("Product 42 was not found");
     }
 
-    private ProductEntity product(Long id, String name, String description, String price, int stockQuantity) {
+    @Test
+    void treatsIdsOutsideTheSqliteIntegerRangeAsMissingWithoutRepositoryAccess() {
+        for (long id : List.of(0L, -1L, (long) Integer.MAX_VALUE + 1L, Long.MAX_VALUE)) {
+            assertThatThrownBy(() -> productService.findById(id))
+                    .isInstanceOf(ProductNotFoundException.class)
+                    .hasMessage("Product " + id + " was not found");
+        }
+
+        verifyNoInteractions(productRepository);
+    }
+
+    private ProductEntity product(Integer id, String name, String description, String price, int stockQuantity) {
         ProductEntity product = new ProductEntity(name, description, new BigDecimal(price), stockQuantity);
         product.setId(id);
         product.setCreatedAt(Instant.parse("2024-01-01T00:00:00Z"));

@@ -187,6 +187,40 @@ class ProductControllerTest {
     }
 
     @Test
+    void rejectsMalformedJsonWithoutCallingServiceB() throws Exception {
+        mockMvc.perform(post("/api/products")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.message").value("Malformed JSON request"))
+                .andExpect(jsonPath("$.path").value("/api/products"))
+                .andExpect(jsonPath("$.fieldErrors").isMap())
+                .andExpect(jsonPath("$.fieldErrors").isEmpty())
+                .andExpect(jsonPath("$.trace").doesNotExist())
+                .andExpect(jsonPath("$.exception").doesNotExist());
+
+        verifyNoInteractions(productClient);
+    }
+
+    @Test
+    void rejectsNonNumericPathIdWithoutCallingServiceB() throws Exception {
+        mockMvc.perform(get("/api/products/not-a-number"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.message").value("Invalid request parameter"))
+                .andExpect(jsonPath("$.path").value("/api/products/not-a-number"))
+                .andExpect(jsonPath("$.fieldErrors").isMap())
+                .andExpect(jsonPath("$.fieldErrors").isEmpty())
+                .andExpect(jsonPath("$.trace").doesNotExist())
+                .andExpect(jsonPath("$.exception").doesNotExist());
+
+        verifyNoInteractions(productClient);
+    }
+
+    @Test
     void rendersAnUpstream400ThroughTheControllerAdvice() throws Exception {
         when(productClient.findById(7L)).thenThrow(feignException(400, "{\"message\":\"Name must be unique\"}"));
 

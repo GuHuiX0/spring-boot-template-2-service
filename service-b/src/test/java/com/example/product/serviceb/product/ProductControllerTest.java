@@ -182,6 +182,40 @@ class ProductControllerTest {
     }
 
     @Test
+    void rejectsMalformedJsonWithoutCallingTheService() throws Exception {
+        mockMvc.perform(post("/internal/products")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.message").value("Malformed JSON request"))
+                .andExpect(jsonPath("$.path").value("/internal/products"))
+                .andExpect(jsonPath("$.fieldErrors").isMap())
+                .andExpect(jsonPath("$.fieldErrors").isEmpty())
+                .andExpect(jsonPath("$.trace").doesNotExist())
+                .andExpect(jsonPath("$.exception").doesNotExist());
+
+        verifyNoInteractions(productService);
+    }
+
+    @Test
+    void rejectsNonNumericPathIdWithoutCallingTheService() throws Exception {
+        mockMvc.perform(get("/internal/products/not-a-number"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.message").value("Invalid request parameter"))
+                .andExpect(jsonPath("$.path").value("/internal/products/not-a-number"))
+                .andExpect(jsonPath("$.fieldErrors").isMap())
+                .andExpect(jsonPath("$.fieldErrors").isEmpty())
+                .andExpect(jsonPath("$.trace").doesNotExist())
+                .andExpect(jsonPath("$.exception").doesNotExist());
+
+        verifyNoInteractions(productService);
+    }
+
+    @Test
     void returnsStableNotFoundErrorWithoutTraceDetails() throws Exception {
         doThrow(new ProductNotFoundException(99L)).when(productService).findById(99L);
 
